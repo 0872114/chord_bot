@@ -1,0 +1,4 @@
+simpleaudio
+numpy
+python-telegram-bot
+MIDIUtil==1.2.1
