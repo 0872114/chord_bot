@@ -1,5 +1,4 @@
 from note import Note
-from copy import copy
 
 
 class Tuning:
@@ -48,6 +47,8 @@ class Fretboard:
 
     def __init__(self, tuning=None, frets=22):
         self.frets = frets
+        self.allow_bass = True
+        self.allow_octaves = True
         if tuning is None:
             self.tuning = Tuning()
         else:
@@ -61,9 +62,84 @@ class Fretboard:
         start_note = self.tuning[n-1]
         return start_note + int(fret)
 
-    def find_note(self, note):
-        for n in self.tuning:
-            print(note - n, end=' ')
+    def find_chord_(self, chord, kapo=0, max_frets=3):
+        noteset = set()
+        chord_pos = list()
+        major_steps = [note.major for note in chord.steps.values()]
+        for k, n in enumerate(self.tuning):
+            n = n.major
+            nearest_notes = list()
+            for i in range(-24, 24, 12):
+                nearest_notes += [note + i - n for note in major_steps
+                                  if note + i - n >= 0]
+
+            for nearest_note in nearest_notes:
+                chord_pos.append((k + 1, nearest_note))
+                noteset.add(nearest_note)
+
+        return sorted(chord_pos), chord
+
+    @property
+    def strings(self):
+        return len(list(self.tuning))
+
+    def draw_chord(self, chord_data):
+        inner_steps, chord = chord_data
+        steps = inner_steps
+        frets = [v for k, v in steps if v is not None]
+        if not frets:
+            return ['Failed to build']
+
+        fret_max = 11
+        fret_min = min(frets)
+
+        fretboard = list()
+        for n in range(self.strings, 0, -1):
+            string = list()
+            found = False
+            for i in range(fret_min, fret_max + 2):
+                if (n, i) in inner_steps:
+                    template = ' {} '
+                    current_note = self[n, i]
+                    if current_note.major.key == chord.tonic.major.key:
+                        template = '`{} '
+                    elif chord.steps.get(3) is not None and current_note.major.key == chord.steps[3].major.key:
+                        template = '³{} '
+                    elif chord.steps.get(7) is not None and current_note.major.key == chord.steps[7].major.key:
+                        template = '⁷{} '
+                    symb = template.format(n)
+                    found = True
+                else:
+                    symb = '  '
+                string.append('{}'.format(symb).rjust(5))
+            if not found:
+                string[0] = '  X  '
+            fretboard.append('|'.join(string))
+        string = list()
+        for i in range(fret_min, fret_max + 2):
+            string.append('{}'.format(i).rjust(5))
+        fretboard.append(' '.join(string))
+        return fretboard
+
+    def find_note(self, note, exact=False, frets=22, kapo=0):
+        for string, n in enumerate(self.tuning):
+            i = 0
+            if exact:
+                if frets >= note - n >= kapo:
+                    yield string + 1, note - n
+            else:
+                while (n + i).name != note.name:
+                    i += 1
+                yield string + 1, i
+
+    def find_chord(self, chord, exact=False, frets=22, kapo=0):
+        applicature = dict()
+        for step, note in chord.steps.items():
+            positions = list()
+            for string, fret in self.find_note(note, exact=exact, frets=frets, kapo=kapo):
+                positions.append((string, fret))
+            applicature[step] = positions
+        return applicature, chord.steps
 
     def draw_note(self, notes, start=0, end=None):
         if end is None:
@@ -72,6 +148,7 @@ class Fretboard:
         for n in reversed(list(self.tuning)):
             string = list()
             for i in range(start, end + 1):
+
                 if (n + i).major.key in notes:
                     symb = (n + i).major
                 elif (n + i).minor.key in notes:
@@ -84,6 +161,26 @@ class Fretboard:
         for i in range(start, end + 1):
             string.append('{}'.format(i).rjust(4))
         print(' '.join(string))
+
+    def get_schema(self, notes, start=0, end=11):
+        schema = list()
+        for n in reversed(list(self.tuning)):
+            string = list()
+            for i in range(start, end + 1):
+                if (n + i).major.key in notes:
+                    symb = (n + i).major
+                elif (n + i).minor.key in notes:
+                    symb = (n + i).minor
+                else:
+                    symb = '  '
+                string.append(' {}'.format(symb).rjust(4))
+            schema.append('|'.join(string))
+
+        string = list()
+        for i in range(start, end + 1):
+            string.append('{}'.format(i).rjust(4))
+        schema.append(' '.join(string))
+        return schema
 
     def __getitem__(self, item):
         return self.note(*item)
@@ -250,6 +347,10 @@ class ChordBuilder:
             note_names.append(self.steps[key].key)
         for note in note_names:
             yield note
+
+    @property
+    def dominant(self):
+        return self.steps[max(self.steps.keys())]
 
     def __str__(self):
         note_names = list()

@@ -2,8 +2,7 @@ class Semitone:
 
     def __init__(self, name, enharmonic=False):
         self.name = name
-        self.is_note = enharmonic
-
+        self.is_note = not enharmonic
 
 
 class Note:
@@ -70,6 +69,11 @@ class Note:
         return Note(key.name, octave=self.octave)
 
     @property
+    def name(self):
+        major = self.major
+        return major.key
+
+    @property
     def frequency(self):
         n = self - Note('A')
         f0 = 440 * 2 ** (n / 12)
@@ -107,7 +111,7 @@ class Note:
         return '{}{}'.format(self.key, self.octave)
 
     def __repr__(self):
-        return '{}'.format(self.key)
+        return '{}{}'.format(self.key, self.octave)
 
 
 
